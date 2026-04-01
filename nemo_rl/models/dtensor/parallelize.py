@@ -173,7 +173,7 @@ def _parallelize_gemma3(
 ) -> dict[str, ParallelStyle]:
     """Parallelizes a Gemma3ForCausalLM model across data and tensor parallel dimensions."""
     if isinstance(model, Gemma3ForConditionalGeneration):
-        model_prefix = "model.language_model"
+        model_prefix = "model.model.language_model"
     else:
         model_prefix = "model"
 
@@ -581,14 +581,13 @@ def _parallelize_model(
 
     # Handle different model structures
     if model_cls == Gemma3ForConditionalGeneration:
-        # layers: torch.nn.ModuleList = model.language_model.layers  # type: ignore
         layers: list = []
-        for layer in model.language_model.layers:
+        for layer in model.model.language_model.layers:
             layers.append(layer)
         # siglip encoder also has the same structure as clip encoder (being the same model after all)
-        for layer in model.vision_tower.vision_model.encoder.layers:
+        for layer in model.model.vision_tower.vision_model.encoder.layers:
             layers.append(layer)
-        layers: torch.nn.ModuleList = model.language_model.layers  # type: ignore
+        layers: torch.nn.ModuleList = model.model.language_model.layers  # type: ignore
         num_attention_heads = model.config.text_config.num_attention_heads
         num_key_value_heads = model.config.text_config.num_key_value_heads
 
