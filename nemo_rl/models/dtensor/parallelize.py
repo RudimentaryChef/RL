@@ -33,6 +33,8 @@ from torch.distributed.tensor import DTensor
 from torch.distributed.tensor.parallel import (
     ColwiseParallel,
     ParallelStyle,
+    PrepareModuleInput,
+    PrepareModuleOutput,
     RowwiseParallel,
     SequenceParallel,
     parallelize_module,
@@ -171,14 +173,18 @@ def _parallelize_gemma3(
     model: Union[Gemma3ForCausalLM, Gemma3ForConditionalGeneration],
     sequence_parallel: bool = False,
 ) -> dict[str, ParallelStyle]:
-    """Parallelizes a Gemma3ForCausalLM model across data and tensor parallel dimensions."""
+    """Parallelizes a Gemma3ForCausalLM model across data parallel dimensions.
+
+    Tensor parallelism is not supported for Gemma3 models because of tied word embeddings.
+    """
     if isinstance(model, Gemma3ForConditionalGeneration):
         model_prefix = "model.model.language_model"
     else:
         model_prefix = "model"
 
+    # For gemma3 models, we don't include the model.embed_tokens and lm_head in the
+    # parallelization plans because they have tied weights.
     base_model_tp_plan: dict[str, ParallelStyle] = {
-        f"{model_prefix}.embed_tokens": RowwiseParallel(input_layouts=Replicate()),
         f"{model_prefix}.layers.*.self_attn.q_proj": ColwiseParallel(),
         f"{model_prefix}.layers.*.self_attn.k_proj": ColwiseParallel(),
         f"{model_prefix}.layers.*.self_attn.v_proj": ColwiseParallel(),
@@ -186,12 +192,13 @@ def _parallelize_gemma3(
         f"{model_prefix}.layers.*.mlp.up_proj": ColwiseParallel(),
         f"{model_prefix}.layers.*.mlp.gate_proj": ColwiseParallel(),
         f"{model_prefix}.layers.*.mlp.down_proj": RowwiseParallel(),
-        "lm_head": ColwiseParallel(output_layouts=Shard(-1), use_local_output=False),
     }
 
     base_model_sp_plan = {
-        f"{model_prefix}.embed_tokens": RowwiseParallel(
-            input_layouts=Replicate(), output_layouts=Shard(1)
+        f"{model_prefix}.embed_tokens": PrepareModuleOutput(
+            output_layouts=Replicate(),
+            desired_output_layouts=Shard(1),
+            use_local_output=False,
         ),
         f"{model_prefix}.rotary_emb": RotaryEmbedParallel(use_local_output=True),
         f"{model_prefix}.layers.*.input_layernorm": SequenceParallel(),
@@ -205,8 +212,10 @@ def _parallelize_gemma3(
         ),
         f"{model_prefix}.layers.*.post_feedforward_layernorm": SequenceParallel(),
         f"{model_prefix}.norm": SequenceParallel(),
-        "lm_head": ColwiseParallel(
-            input_layouts=Shard(1), output_layouts=Shard(-1), use_local_output=False
+        "lm_head": PrepareModuleInput(
+            input_layouts=(Shard(1),),
+            desired_input_layouts=(Replicate(),),
+            use_local_output=True,
         ),
     }
 
