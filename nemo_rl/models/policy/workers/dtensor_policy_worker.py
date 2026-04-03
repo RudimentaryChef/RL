@@ -45,7 +45,10 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
 )
-from transformers.models.gemma3.modeling_gemma3 import Gemma3ForCausalLM, Gemma3ForConditionalGeneration
+from transformers.models.gemma3.modeling_gemma3 import (
+    Gemma3ForCausalLM,
+    Gemma3ForConditionalGeneration,
+)
 
 from nemo_rl.algorithms.logits_sampling_utils import (
     TrainingSamplingParams,
@@ -334,7 +337,9 @@ class DTensorPolicyWorkerImpl(AbstractPolicyWorker, ColocatablePolicyInterface):
                 "[WARNING]: sequence_parallel=True, but tp_size=1 which has no effect. Enable tp_size > 1 to use sequence parallelism."
             )
 
-        self.is_gemma3 = isinstance(self.model, Gemma3ForCausalLM) or isinstance(self.model, Gemma3ForConditionalGeneration)
+        self.is_gemma3 = isinstance(self.model, Gemma3ForCausalLM) or isinstance(
+            self.model, Gemma3ForConditionalGeneration
+        )
         if cp_size > 1:
             assert not self.is_gemma3, (
                 "Context parallel is not supported for Gemma3 models. Torch context parallel has many limitations. "
@@ -765,7 +770,9 @@ class DTensorPolicyWorkerImpl(AbstractPolicyWorker, ColocatablePolicyInterface):
                             # Gemma3 requires token_type_ids when model.training=True.
                             # For text-only inputs, default to zeros (text tokens).
                             if self.is_gemma3 and "token_type_ids" not in model_args:
-                                model_args["token_type_ids"] = torch.zeros_like(input_ids)
+                                model_args["token_type_ids"] = torch.zeros_like(
+                                    input_ids
+                                )
 
                             if self._is_reward_model:
                                 # `flash_attn_kwarg` is not supported for `LlamaForSequenceClassification`.
